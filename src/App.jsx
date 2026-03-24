@@ -528,6 +528,7 @@ export default function App() {
   const [inspectIndicators, setInspectIndicators] = useState({ ema: true, rsi: true, bb: false, vol: true });
   const [customStop, setCustomStop] = useState("");
   const [customTP, setCustomTP] = useState("");
+  const [expandedTrade, setExpandedTrade] = useState(null);
   const inspectCvRef = useRef(null);
   const [inspectCur, setInspectCur] = useState(null);
   const countdown4h = useCountdown("4h");
@@ -1019,9 +1020,18 @@ export default function App() {
               <div style={{ fontWeight: 700, fontSize: 11, color: "#94a3b8", marginBottom: 4, marginTop: 8 }}>History ({paper.trades.length})</div>
               {paper.trades.length === 0 ? <div style={{ color: "#334155", fontSize: 10, padding: 16, textAlign: "center" }}>No trades yet</div> :
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10 }}>
-                  <thead><tr style={{ background: "#080c14" }}>{["Sym", "Side", "Entry", "Exit", "Size", "P&L", "Result"].map(h => <th key={h} style={{ padding: "4px 8px", textAlign: "left", color: "#334155", fontWeight: 600, fontSize: 9, borderBottom: "1px solid #1a2744" }}>{h}</th>)}</tr></thead>
-                  <tbody>{paper.trades.map(t => (
-                    <tr key={t.id} style={{ borderBottom: "1px solid #0c1018", background: t.status === "WIN" ? "#10b98105" : "#ef444405" }}>
+                  <thead><tr style={{ background: "#080c14" }}>{["", "Sym", "Side", "Entry", "Exit", "Size", "P&L", "Result"].map(h => <th key={h} style={{ padding: "4px 8px", textAlign: "left", color: "#334155", fontWeight: 600, fontSize: 9, borderBottom: "1px solid #1a2744" }}>{h}</th>)}</tr></thead>
+                  <tbody>{paper.trades.map(t => {
+                    const isExp = expandedTrade === t.id;
+                    const duration = t.closeTime && t.time ? Math.round((new Date(t.closeTime) - new Date(t.time)) / 1000) : 0;
+                    const dMin = Math.floor(duration / 60), dSec = duration % 60;
+                    const pnlPct = t.size > 0 ? ((t.pnl / t.size) * 100).toFixed(2) : "0";
+                    const riskAmt = Math.abs(t.entry - t.stop);
+                    const rewAmt = Math.abs(t.exit - t.entry);
+                    const rrAchieved = riskAmt > 0 ? (rewAmt / riskAmt).toFixed(1) : "—";
+                    return (<>
+                    <tr key={t.id} onClick={() => setExpandedTrade(isExp ? null : t.id)} style={{ borderBottom: isExp ? "none" : "1px solid #0c1018", background: t.status === "WIN" ? "#10b98105" : "#ef444405", cursor: "pointer" }}>
+                      <td style={{ padding: "4px 6px", fontSize: 10, color: "#475569" }}>{isExp ? "▼" : "▶"}</td>
                       <td style={{ padding: "4px 8px", fontWeight: 700 }}>{t.sym.replace("USDT", "")}</td>
                       <td style={{ padding: "4px 8px", color: t.side === "LONG" ? "#10b981" : "#ef4444", fontWeight: 700 }}>{t.side}</td>
                       <td style={{ padding: "4px 8px" }}>{fp(t.entry)}</td>
@@ -1030,7 +1040,52 @@ export default function App() {
                       <td style={{ padding: "4px 8px", color: t.pnl >= 0 ? "#10b981" : "#ef4444", fontWeight: 700 }}>{t.pnl >= 0 ? "+" : ""}${t.pnl.toFixed(2)}</td>
                       <td style={{ padding: "4px 8px" }}><span style={{ background: t.status === "WIN" ? "#10b98115" : "#ef444415", color: t.status === "WIN" ? "#10b981" : "#ef4444", padding: "1px 5px", borderRadius: 3, fontSize: 8, fontWeight: 700 }}>{t.status}</span></td>
                     </tr>
-                  ))}</tbody>
+                    {isExp && (
+                      <tr key={t.id + "_detail"}>
+                        <td colSpan={8} style={{ padding: 0 }}>
+                          <div style={{ background: "#0a0f1a", border: "1px solid #1a2744", borderTop: "none", borderRadius: "0 0 6px 6px", padding: "10px 14px", margin: "0 4px 6px 4px" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
+                              {[
+                                { l: "Open Time", v: t.time ? new Date(t.time).toLocaleString("en-AU", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit", second:"2-digit" }) : "—", c: "#94a3b8" },
+                                { l: "Close Time", v: t.closeTime ? new Date(t.closeTime).toLocaleString("en-AU", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit", second:"2-digit" }) : "—", c: "#94a3b8" },
+                                { l: "Duration", v: `${dMin}m ${dSec}s`, c: "#06b6d4" },
+                                { l: "Return", v: `${parseFloat(pnlPct) >= 0 ? "+" : ""}${pnlPct}%`, c: parseFloat(pnlPct) >= 0 ? "#10b981" : "#ef4444" },
+                              ].map(d => (
+                                <div key={d.l} style={{ background: "#0c1120", borderRadius: 4, padding: "6px 8px", border: "1px solid #111827" }}>
+                                  <div style={{ fontSize: 7, color: "#475569", textTransform: "uppercase", marginBottom: 2 }}>{d.l}</div>
+                                  <div style={{ fontSize: 10, fontWeight: 700, color: d.c }}>{d.v}</div>
+                                </div>
+                              ))}
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 8 }}>
+                              {[
+                                { l: "Entry Price", v: `$${fp(t.entry)}`, c: "#3b82f6" },
+                                { l: "Exit Price", v: `$${fp(t.exit)}`, c: t.pnl >= 0 ? "#10b981" : "#ef4444" },
+                                { l: "Stop Loss", v: t.stop ? `$${fp(t.stop)}` : "—", c: "#ef4444" },
+                                { l: "Position Size", v: `$${t.size.toLocaleString()}`, c: "#f59e0b" },
+                                { l: "R:R Achieved", v: `${rrAchieved}:1`, c: "#06b6d4" },
+                              ].map(d => (
+                                <div key={d.l} style={{ background: "#0c1120", borderRadius: 4, padding: "6px 8px", border: "1px solid #111827" }}>
+                                  <div style={{ fontSize: 7, color: "#475569", textTransform: "uppercase", marginBottom: 2 }}>{d.l}</div>
+                                  <div style={{ fontSize: 10, fontWeight: 700, color: d.c }}>{d.v}</div>
+                                </div>
+                              ))}
+                            </div>
+                            <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center" }}>
+                              <div style={{ fontSize: 8, color: "#475569" }}>Qty: <span style={{ color: "#94a3b8" }}>{t.qty?.toFixed(4) || "—"}</span></div>
+                              <div style={{ fontSize: 8, color: "#475569" }}>TP1: <span style={{ color: "#10b981" }}>{t.tp1 ? `$${fp(t.tp1)}` : "—"}</span></div>
+                              <div style={{ fontSize: 8, color: "#475569" }}>TP2: <span style={{ color: "#22c55e" }}>{t.tp2 ? `$${fp(t.tp2)}` : "—"}</span></div>
+                              <div style={{ flex: 1 }} />
+                              <div style={{ fontSize: 8, padding: "2px 8px", borderRadius: 3, background: t.pnl >= 0 ? "#10b98110" : "#ef444410", color: t.pnl >= 0 ? "#10b981" : "#ef4444", fontWeight: 700 }}>
+                                {t.pnl >= 0 ? "✓ " : "✗ "}{t.status} {t.pnl >= 0 ? "+" : ""}${t.pnl.toFixed(2)} ({pnlPct}%)
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </>);
+                  })}</tbody>
                 </table>}
             </div>
           </div>
