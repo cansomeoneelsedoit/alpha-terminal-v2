@@ -1,0 +1,5 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "npm run build && npx vite preview --port ${PORT:-3000} --host 0.0.0.0"
